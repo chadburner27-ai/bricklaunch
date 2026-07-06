@@ -25,6 +25,9 @@ import { useAuth } from "../lib/auth";
 const GAMESERVER_URL =
   (import.meta as any).env?.VITE_GAMESERVER_URL ||
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:2567`;
+// HTTP form of the same host, for the /counts capacity check.
+const COUNTS_URL = GAMESERVER_URL.replace(/^ws/, "http") + "/counts";
+const MAX_PLAYERS = 35;
 const GRAVITY = -0.22;
 const WALK_SPEED = 0.18;
 const JUMP_POWER = 0.32;
@@ -60,6 +63,7 @@ export function PlayerPage() {
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [playerCount, setPlayerCount] = useState(1);
+  const [full, setFull] = useState(false);
 
   // murder-mode HUD state (mirrored into refs for use inside Babylon callbacks)
   const [role, _setRole] = useState<Role>("none");
@@ -141,16 +145,60 @@ export function PlayerPage() {
       // switches to first person (your character hides until you zoom out).
       const canvasEl = scene.getEngine().getRenderingCanvas();
       if (canvasEl) canvasEl.oncontextmenu = (e) => e.preventDefault();
-      const pointersInput = camera.inputs.attached.pointers as any;
-      if (pointersInput) pointersInput.buttons = [2]; // right button orbits
-      camera.panningSensibility = 0; // no panning — camera stays on the player
-      camera.lowerRadiusLimit = 0.5;
-      camera.upperRadiusLimit = 28;
-      camera.wheelDeltaPercentage = 0.08;
+
+      // Full manual camera control — Babylon's built-in input differs across
+      // versions (left vs right, orbit vs pan), so we drive it ourselves for
+      // predictable Roblox-style feel: hold RIGHT mouse and drag to orbit,
+      // scroll to zoom, left button stays free for clicking/attacking.
+      camera.detachControl();
+      const MIN_RADIUS = 0.5;
+      const MAX_RADIUS = 28;
+      const MIN_BETA = 0.15;      // how high you can look
+      const MAX_BETA = 2.6;       // how low (near ground level)
+      const ORBIT_SPEED = 0.006;  // radians per pixel dragged
+      // Override BabylonCanvas's defaults so zoom can reach first person.
+      camera.lowerRadiusLimit = MIN_RADIUS;
+      camera.upperRadiusLimit = MAX_RADIUS;
       camera.radius = 14;
       camera.setTarget(collider.position.clone());
       const FIRST_PERSON_AT = 1.6;
       let firstPerson = false;
+
+      let orbiting = false;
+      let lastPX = 0, lastPY = 0;
+      const onCamDown = (e: PointerEvent) => {
+        if (e.button !== 2) return; // right button only
+        orbiting = true;
+        lastPX = e.clientX;
+        lastPY = e.clientY;
+        canvasEl?.setPointerCapture?.(e.pointerId);
+      };
+      const onCamMove = (e: PointerEvent) => {
+        if (!orbiting) return;
+        const dx = e.clientX - lastPX;
+        const dy = e.clientY - lastPY;
+        lastPX = e.clientX;
+        lastPY = e.clientY;
+        camera.alpha -= dx * ORBIT_SPEED;
+        camera.beta = Math.min(MAX_BETA, Math.max(MIN_BETA, camera.beta - dy * ORBIT_SPEED));
+      };
+      const onCamUp = (e: PointerEvent) => {
+        if (e.button === 2) orbiting = false;
+      };
+      const onCamWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        camera.radius = Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, camera.radius + e.deltaY * 0.02));
+      };
+      canvasEl?.addEventListener("pointerdown", onCamDown);
+      canvasEl?.addEventListener("pointermove", onCamMove);
+      window.addEventListener("pointerup", onCamUp);
+      canvasEl?.addEventListener("wheel", onCamWheel, { passive: false });
+      cleanupFns.push(() => {
+        canvasEl?.removeEventListener("pointerdown", onCamDown);
+        canvasEl?.removeEventListener("pointermove", onCamMove);
+        window.removeEventListener("pointerup", onCamUp);
+        canvasEl?.removeEventListener("wheel", onCamWheel);
+      });
 
       let vy = 0;
       let grounded = false;
@@ -212,13 +260,35 @@ export function PlayerPage() {
 
       // 4) multiplayer
       try {
+        // Capacity gate: a game holds up to MAX_PLAYERS. Checking /counts before
+        // joining also stops joinOrCreate from silently spinning up a 2nd room
+        // (which would split players across servers).
+        const counts = await fetch(COUNTS_URL).then((r) => r.json()).catch(() => ({}));
+        if ((counts[gameId!] ?? 0) >= MAX_PLAYERS) {
+          setFull(true);
+          setStatus("");
+          return;
+        }
+
         const client = new Client(GAMESERVER_URL);
-        const room = await client.joinOrCreate("game", {
-          gameId,
-          name: user?.username ?? `guest${Math.floor(Math.random() * 999)}`,
-          avatar: JSON.stringify(avatar),
-          mode: sd.mode ?? "sandbox",
-        });
+        let room: Room;
+        try {
+          room = await client.joinOrCreate("game", {
+            gameId,
+            name: user?.username ?? `guest${Math.floor(Math.random() * 999)}`,
+            avatar: JSON.stringify(avatar),
+            mode: sd.mode ?? "sandbox",
+          });
+        } catch (joinErr: any) {
+          // Room locked/full between our check and the join → treat as full.
+          const msg = String(joinErr?.message ?? joinErr).toLowerCase();
+          if (msg.includes("full") || msg.includes("locked") || msg.includes("seat")) {
+            setFull(true);
+            setStatus("");
+            return;
+          }
+          throw joinErr;
+        }
         if (disposed) { room.leave(); return; }
         roomRef.current = room;
 
@@ -459,6 +529,18 @@ export function PlayerPage() {
   // not as a guest during the initial token check.
   if (loading) {
     return <div className="container"><p className="muted">Loading…</p></div>;
+  }
+
+  if (full) {
+    return (
+      <div className="center">
+        <div className="auth-card" style={{ textAlign: "center" }}>
+          <h2>Game is full</h2>
+          <p className="muted">This server has reached its {MAX_PLAYERS}-player limit. Please try again later.</p>
+          <button onClick={() => nav("/")}>← Back to games</button>
+        </div>
+      </div>
+    );
   }
 
   return (

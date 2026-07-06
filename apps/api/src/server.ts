@@ -53,10 +53,17 @@ function toSummary(g: any): GameSummary {
 app.get("/health", async () => ({ ok: true }));
 
 // ---- Auth ------------------------------------------------------------------
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const normalizeEmail = (e: unknown) => String(e ?? "").trim().toLowerCase();
+
 app.post("/auth/register", async (req, reply) => {
-  const { username, email, password } = (req.body ?? {}) as any;
+  const { username, password } = (req.body ?? {}) as any;
+  const email = normalizeEmail((req.body as any)?.email);
   if (!username || !email || !password || password.length < 6) {
     return reply.code(400).send({ error: "username, email, and 6+ char password required" });
+  }
+  if (!EMAIL_RE.test(email)) {
+    return reply.code(400).send({ error: "please enter a valid email address" });
   }
   const exists = await prisma.user.findFirst({
     where: { OR: [{ username }, { email }] },
@@ -72,7 +79,11 @@ app.post("/auth/register", async (req, reply) => {
 });
 
 app.post("/auth/login", async (req, reply) => {
-  const { email, password } = (req.body ?? {}) as any;
+  const { password } = (req.body ?? {}) as any;
+  const email = normalizeEmail((req.body as any)?.email);
+  if (!email || !EMAIL_RE.test(email)) {
+    return reply.code(400).send({ error: "a valid email address is required" });
+  }
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !(await bcrypt.compare(password ?? "", user.passwordHash))) {
     return reply.code(401).send({ error: "invalid credentials" });

@@ -12,13 +12,24 @@ export function Login() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Simple, permissive email shape check: something@something.tld
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!email.trim()) {
+      setError("Please enter your email address.");
+      return;
+    }
+    if (!EMAIL_RE.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
     setBusy(true);
     try {
-      if (mode === "login") await login(email, password);
-      else await register(username, email, password);
+      if (mode === "login") await login(email.trim(), password);
+      else await register(username, email.trim(), password);
       nav("/");
     } catch (err: any) {
       setError(err.message);
@@ -41,6 +52,7 @@ export function Login() {
         <input
           placeholder="Email"
           type="email"
+          required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />

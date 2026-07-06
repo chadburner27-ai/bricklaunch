@@ -76,8 +76,10 @@ const SHOOT_RANGE = 60;
 const PICKUP_RANGE = 5;
 const MIN_PLAYERS = 2;
 
+export const MAX_PLAYERS = 35;
+
 export class GameRoom extends Room<RoomState> {
-  maxClients = 16;
+  maxClients = MAX_PLAYERS;
   private lastChatAt = new Map<string, number>();
   private roles = new Map<string, Role>(); // sessionId -> secret role
 
