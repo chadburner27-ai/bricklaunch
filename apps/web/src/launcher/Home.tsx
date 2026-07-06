@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { GameSummary } from "@launcher/shared";
 import { api, getToken } from "../lib/api";
 import { GameCard } from "./GameCard";
+import { IS_DESKTOP, DOWNLOAD_URL } from "../lib/platform";
 
 const COUNTS_URL =
   ((import.meta as any).env?.VITE_GAMESERVER_URL || `${location.protocol}//${location.hostname}:2567`)
@@ -71,6 +72,17 @@ export function Home() {
 
   return (
     <div className="container">
+      {!IS_DESKTOP && (
+        <div className="download-banner">
+          <div>
+            <strong>🎮 Play in the BrickLaunch app</strong>
+            <span className="muted"> — build & play these games in glorious 3D with friends.</span>
+          </div>
+          <a href={DOWNLOAD_URL} download>
+            <button>⬇ Download for Windows</button>
+          </a>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18, flexWrap: "wrap" }}>
         <div className="section-title" style={{ margin: 0 }}>Discover Games</div>
         {totalOnline > 0 && <span className="muted">🟢 {totalOnline} online now</span>}

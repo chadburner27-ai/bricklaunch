@@ -24,6 +24,7 @@
     "esbuild@0.28.1": true,
     "esbuild@0.25.12": true,
     "prisma@6.19.3": true,
-    "msgpackr-extract@3.0.4": true
+    "msgpackr-extract@3.0.4": true,
+    "electron@33.4.11": true
   }
 }

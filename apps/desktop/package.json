@@ -1,0 +1,38 @@
+{
+  "name": "@launcher/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BrickLaunch desktop app",
+  "author": "BrickLaunch",
+  "main": "main.cjs",
+  "scripts": {
+    "sync": "node sync-renderer.cjs",
+    "start": "electron .",
+    "dist": "npm run sync && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.2",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.bricklaunch.app",
+    "productName": "BrickLaunch",
+    "electronVersion": "33.4.11",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "renderer/**/*"
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "portable": {
+      "artifactName": "BrickLaunch.exe"
+    }
+  }
+}

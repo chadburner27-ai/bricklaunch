@@ -6,4 +6,6 @@ build/
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
 apps/api/storage/
+apps/desktop/renderer/
+apps/desktop/dist/
 .DS_Store

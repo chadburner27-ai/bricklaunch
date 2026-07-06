@@ -20,6 +20,8 @@ import { buildCharacter, type CharacterHandle } from "../engine/character";
 import { LuaRunner } from "../lua/LuaRunner";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { IS_DESKTOP } from "../lib/platform";
+import { DownloadScreen } from "../launcher/DownloadScreen";
 
 // Configurable for deployment; defaults to same-host for local/LAN play.
 const GAMESERVER_URL =
@@ -531,6 +533,11 @@ export function PlayerPage() {
     return <div className="container"><p className="muted">Loading…</p></div>;
   }
 
+  // On the website, games are download-gated — real play happens in the EXE.
+  if (!IS_DESKTOP) {
+    return <DownloadScreen />;
+  }
+
   if (full) {
     return (
       <div className="center">
@@ -548,7 +555,7 @@ export function PlayerPage() {
       <div className="player-canvas">
         <BabylonCanvas setup={setup} cameraRadius={22} />
         <div className="player-hud">
-          <button className="ghost" onClick={() => nav("/")}>← Leave</button>
+          <button className="ghost" onClick={() => nav("/")}>← Play Another Game</button>
           <span className="muted">
             {status || `${playerCount} player${playerCount === 1 ? "" : "s"} · WASD move · Space jump · right-drag camera · scroll to zoom`}
           </span>

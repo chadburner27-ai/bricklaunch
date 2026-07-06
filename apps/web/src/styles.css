@@ -283,6 +283,20 @@ input, textarea {
 .sort-tabs { display: flex; gap: 6px; }
 .sort-tabs button { padding: 6px 12px; font-size: 13px; }
 
+.download-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: linear-gradient(90deg, #1a2740, #221a40);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
+}
+.download-banner button { white-space: nowrap; }
+
 /* Murder-mode HUD */
 .round-hud {
   position: absolute;
