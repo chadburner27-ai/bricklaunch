@@ -1,0 +1,29 @@
+{
+  "name": "launcher-monorepo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Roblox-style game launcher: build, publish, and play 3D games with avatars, Lua scripting, multiplayer, and chat.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/api & npm run dev --workspace apps/web",
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "db:push": "npm run db:push --workspace apps/api",
+    "db:seed": "npm run seed --workspace apps/api"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.1": true,
+    "esbuild@0.25.12": true,
+    "prisma@6.19.3": true,
+    "msgpackr-extract@3.0.4": true
+  }
+}

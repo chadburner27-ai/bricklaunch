@@ -1,0 +1,50 @@
+// SQLite for local dev (no Docker needed). Swap `provider`/`url` to Postgres for prod.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  avatarJson   String   @default("")
+  createdAt    DateTime @default(now())
+  games        Game[]
+}
+
+model Game {
+  id           String        @id @default(cuid())
+  title        String
+  description  String        @default("")
+  thumbnailUrl String?
+  published    Boolean       @default(false)
+  plays        Int           @default(0)
+  likes        Int           @default(0)
+  ownerId      String
+  owner        User          @relation(fields: [ownerId], references: [id])
+  versions     GameVersion[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model GameVersion {
+  id         String   @id @default(cuid())
+  gameId     String
+  game       Game     @relation(fields: [gameId], references: [id])
+  storageKey String // path to scene JSON in object storage
+  version    Int
+  createdAt  DateTime @default(now())
+}
+
+model Like {
+  userId String
+  gameId String
+
+  @@id([userId, gameId])
+}

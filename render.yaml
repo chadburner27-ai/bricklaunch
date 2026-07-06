@@ -1,0 +1,38 @@
+# Render.com blueprint — deploys api + gameserver as Node services and the web
+# app as a static site. After the first deploy, set the two VITE_ env vars on
+# the web service to the URLs Render assigns, then redeploy the web service.
+services:
+  - type: web
+    name: bricklaunch-api
+    runtime: node
+    buildCommand: npm install && npx prisma generate --schema apps/api/prisma/schema.prisma && npx prisma db push --schema apps/api/prisma/schema.prisma && npx tsx apps/api/src/seed.ts
+    startCommand: npx tsx apps/api/src/server.ts
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PORT
+        value: 10000
+
+  - type: web
+    name: bricklaunch-gameserver
+    runtime: node
+    buildCommand: npm install
+    startCommand: npx tsx apps/gameserver/src/index.ts
+    envVars:
+      - key: GAMESERVER_PORT
+        value: 10000
+
+  - type: web
+    name: bricklaunch-web
+    runtime: static
+    buildCommand: npm install && npm run build --workspace apps/web
+    staticPublishPath: apps/web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false # set to https://bricklaunch-api.onrender.com after first deploy
+      - key: VITE_GAMESERVER_URL
+        sync: false # set to wss://bricklaunch-gameserver.onrender.com
