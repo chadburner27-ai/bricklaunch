@@ -165,45 +165,128 @@ function sandboxMap(): SceneData {
   return { version: 1, spawnPoint: [0, 3, 40], parts, scripts: [] };
 }
 
-// The murder map: a manor with rooms, hiding spots, and grounds.
+// Murder Mystery: a lobby hub + 3 distinct playable map regions. The server
+// (GameRoom.ts) teleports everyone between the lobby (0,40) and the voted map:
+//   manor (180,40) · village (-180,40) · arena (0,220).
+function mmWalledFloor(
+  name: string, cx: number, cz: number, size: number,
+  floorColor: string, floorMat: PartData["material"], wallColor: string
+): PartData[] {
+  const W = size / 2;
+  return [
+    part({ name: `${name}Floor`, position: [cx, -0.5, cz], size: [size, 1, size], color: floorColor, material: floorMat }),
+    part({ name: `${name}WN`, position: [cx, 4.5, cz - W], size: [size, 9, 1.5], color: wallColor }),
+    part({ name: `${name}WS`, position: [cx, 4.5, cz + W], size: [size, 9, 1.5], color: wallColor }),
+    part({ name: `${name}WE`, position: [cx + W, 4.5, cz], size: [1.5, 9, size], color: wallColor }),
+    part({ name: `${name}WW`, position: [cx - W, 4.5, cz], size: [1.5, 9, size], color: wallColor }),
+  ];
+}
+
+function lobbyRegion(cx: number, cz: number): PartData[] {
+  const parts: PartData[] = [
+    ...mmWalledFloor("Lobby", cx, cz, 60, "#5566aa", "plastic", "#39406a"),
+    part({ name: "LobbyPad", shape: "cylinder", position: [cx, 0.3, cz], size: [12, 0.6, 12], color: "#ffd23f", material: "neon" }),
+    part({ name: "LobbySign", position: [cx, 7, cz - 28], size: [22, 5, 1], color: "#1b2030", material: "metal" }),
+  ];
+  // three map billboards
+  const boards: [number, string][] = [[-16, "#c8bda6"], [0, "#eaf2ff"], [16, "#3fb2ff"]];
+  boards.forEach(([dx, c], i) => {
+    parts.push(part({ name: `LobbyBoard${i}`, position: [cx + dx, 3.5, cz + 22], size: [10, 5, 0.6], color: c, material: i === 2 ? "neon" : "plastic" }));
+    parts.push(part({ name: `LobbyPost${i}`, shape: "cylinder", position: [cx + dx, 1, cz + 22], size: [0.6, 2, 0.6], color: "#39424f", material: "metal" }));
+  });
+  return parts;
+}
+
+function manorRegion(cx: number, cz: number): PartData[] {
+  return [
+    ...mmWalledFloor("Manor", cx, cz, 72, "#4c8a3d", "grass", "#7a6f5a"),
+    // manor building in the middle
+    part({ name: "ManorFloor", position: [cx, 0.2, cz - 8], size: [40, 0.6, 28], color: "#9a8f7a", material: "wood" }),
+    part({ name: "ManorWN", position: [cx, 5, cz - 22], size: [40, 10, 1.2], color: "#c8bda6" }),
+    part({ name: "ManorWWl", position: [cx - 20, 5, cz - 8], size: [1.2, 10, 28], color: "#c8bda6" }),
+    part({ name: "ManorWWr", position: [cx + 20, 5, cz - 8], size: [1.2, 10, 28], color: "#c8bda6" }),
+    part({ name: "ManorDivider", position: [cx - 4, 4, cz - 12], size: [1, 8, 18], color: "#b3a68c" }),
+    part({ name: "ManorTable", position: [cx - 12, 1.5, cz - 16], size: [7, 0.6, 4], color: "#7a5230", material: "wood" }),
+    part({ name: "ManorCrateA", position: [cx + 12, 1.5, cz - 18], size: [3, 3, 3], color: "#8a6a42", material: "wood" }),
+    part({ name: "ManorCrateB", position: [cx + 15, 1.5, cz - 15], size: [3, 3, 3], color: "#96784f", material: "wood" }),
+    part({ name: "ManorSofa", position: [cx - 12, 1.2, cz - 2], size: [7, 2.4, 3], color: "#8a2f4f" }),
+    // grounds
+    ...tree(cx - 26, cz + 18), ...tree(cx + 24, cz + 22, 1.2), ...tree(cx + 28, cz - 20, 0.9),
+    part({ name: "ManorShed", position: [cx + 24, 2, cz + 4], size: [9, 4, 8], color: "#6e5230", material: "wood" }),
+    part({ name: "ManorLampPole", shape: "cylinder", position: [cx, 3, cz + 20], size: [0.6, 6, 0.6], color: "#39424f", material: "metal" }),
+    part({ name: "ManorLampGlow", shape: "sphere", position: [cx, 6.4, cz + 20], size: [1.6, 1.6, 1.6], color: "#ffd23f", material: "neon" }),
+  ];
+}
+
+function villageRegion(cx: number, cz: number): PartData[] {
+  const parts: PartData[] = mmWalledFloor("Village", cx, cz, 72, "#e8eef5", "plastic", "#b8c6d6");
+  // snowy houses
+  const houses: [number, number, string][] = [
+    [-18, -14, "#c96a4a"], [16, -16, "#5a86c9"], [-14, 16, "#6aa84f"], [18, 14, "#b57bee"],
+  ];
+  houses.forEach(([dx, dz, c], i) => {
+    parts.push(part({ name: `VilHouse${i}`, position: [cx + dx, 3, cz + dz], size: [11, 6, 9], color: c }));
+    parts.push(part({ name: `VilRoof${i}`, shape: "wedge", position: [cx + dx, 7.4, cz + dz], size: [11, 3, 10], color: "#eaf2ff" }));
+    parts.push(part({ name: `VilDoor${i}`, position: [cx + dx, 2, cz + dz + 4.6], size: [2.2, 4, 0.3], color: "#5a3a22", material: "wood" }));
+  });
+  // snowy trees (white leaves) + a frozen pond
+  parts.push(
+    part({ name: "VilTreeTrunkA", shape: "cylinder", position: [cx - 4, 3, cz], size: [1.2, 6, 1.2], color: "#7a5230", material: "wood" }),
+    part({ name: "VilTreeSnowA", shape: "sphere", position: [cx - 4, 7, cz], size: [5, 4.5, 5], color: "#eaf2ff" }),
+    part({ name: "VilTreeTrunkB", shape: "cylinder", position: [cx + 6, 3, cz + 6], size: [1.2, 6, 1.2], color: "#7a5230", material: "wood" }),
+    part({ name: "VilTreeSnowB", shape: "sphere", position: [cx + 6, 7, cz + 6], size: [4, 4, 4], color: "#dfe9f5" }),
+    part({ name: "VilPond", shape: "cylinder", position: [cx, 0.15, cz], size: [14, 0.3, 14], color: "#bfe3ff", material: "metal" }),
+  );
+  return parts;
+}
+
+function arenaRegion(cx: number, cz: number): PartData[] {
+  const parts: PartData[] = mmWalledFloor("Arena", cx, cz, 72, "#12141c", "plastic", "#1b2030");
+  const neon = ["#3fb2ff", "#e0457b", "#6ad46a", "#ffd23f", "#b57bee"];
+  // ring of neon pillars + cover blocks
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    parts.push(part({ name: `ArenaPillar${i}`, shape: "cylinder", position: [cx + Math.cos(a) * 24, 4, cz + Math.sin(a) * 24], size: [2.5, 8, 2.5], color: neon[i % neon.length], material: "neon" }));
+    parts.push(part({ name: `ArenaCover${i}`, position: [cx + Math.cos(a) * 12, 1.5, cz + Math.sin(a) * 12], size: [4, 3, 4], color: "#232a3e", material: "metal" }));
+  }
+  parts.push(
+    part({ name: "ArenaCore", shape: "sphere", position: [cx, 6, cz], size: [6, 6, 6], color: "#3fb2ff", material: "neon" }),
+    part({ name: "ArenaRing", shape: "cylinder", position: [cx, 0.3, cz], size: [16, 0.6, 16], color: "#e0457b", material: "neon" }),
+  );
+  return parts;
+}
+
 function murderMap(): SceneData {
   const parts: PartData[] = [
-    grassBase(110),
-    dirtPath(0, 30, 10, 50),
-    // manor floor + outer walls (leaving a front door gap)
-    part({ name: "ManorFloor", position: [0, 0.1, -20], size: [56, 0.4, 40], color: "#9a8f7a", material: "wood" }),
-    part({ name: "WallBack", position: [0, 5, -40], size: [56, 10, 1.5], color: "#c8bda6" }),
-    part({ name: "WallLeft", position: [-28, 5, -20], size: [1.5, 10, 40], color: "#c8bda6" }),
-    part({ name: "WallRight", position: [28, 5, -20], size: [1.5, 10, 40], color: "#c8bda6" }),
-    part({ name: "WallFrontL", position: [-17, 5, 0], size: [22, 10, 1.5], color: "#c8bda6" }),
-    part({ name: "WallFrontR", position: [17, 5, 0], size: [22, 10, 1.5], color: "#c8bda6" }),
-    // inner dividers -> three rooms with door gaps
-    part({ name: "DividerA", position: [-9, 4, -28], size: [1, 8, 22], color: "#b3a68c" }),
-    part({ name: "DividerB", position: [12, 4, -14], size: [30, 8, 1], color: "#b3a68c" }),
-    // furniture / hiding spots
-    part({ name: "Table", position: [-18, 1.5, -30], size: [8, 0.6, 4], color: "#7a5230", material: "wood" }),
-    part({ name: "Crate1", position: [20, 1.5, -34], size: [3, 3, 3], color: "#8a6a42", material: "wood" }),
-    part({ name: "Crate2", position: [23.5, 1.5, -30], size: [3, 3, 3], color: "#8a6a42", material: "wood" }),
-    part({ name: "Crate3", position: [20, 4.5, -32], size: [3, 3, 3], color: "#96784f", material: "wood" }),
-    part({ name: "Sofa", position: [-20, 1.2, -8], size: [7, 2.4, 3], color: "#8a2f4f" }),
-    // grounds: shed + trees for outdoor hiding
-    part({ name: "ShedFloor", position: [34, 0.1, 24], size: [14, 0.4, 12], color: "#9a8f7a", material: "wood" }),
-    part({ name: "ShedBack", position: [34, 3.5, 30], size: [14, 7, 1], color: "#6e5230", material: "wood" }),
-    part({ name: "ShedLeft", position: [27, 3.5, 24], size: [1, 7, 12], color: "#6e5230", material: "wood" }),
-    part({ name: "ShedRight", position: [41, 3.5, 24], size: [1, 7, 12], color: "#6e5230", material: "wood" }),
-    part({ name: "ShedRoof", shape: "wedge", position: [34, 7.8, 24], size: [14, 3, 13], color: "#5a4326", material: "wood" }),
-    ...tree(-35, 25), ...tree(-42, 8, 1.2), ...tree(45, -5, 0.9), ...tree(-15, 45, 1.1),
-    // lamp posts along the path
-    part({ name: "LampPole1", shape: "cylinder", position: [7, 3, 20], size: [0.6, 6, 0.6], color: "#39424f", material: "metal" }),
-    part({ name: "LampGlow1", shape: "sphere", position: [7, 6.4, 20], size: [1.6, 1.6, 1.6], color: "#ffd23f", material: "neon" }),
-    part({ name: "LampPole2", shape: "cylinder", position: [-7, 3, 40], size: [0.6, 6, 0.6], color: "#39424f", material: "metal" }),
-    part({ name: "LampGlow2", shape: "sphere", position: [-7, 6.4, 40], size: [1.6, 1.6, 1.6], color: "#ffd23f", material: "neon" }),
+    ...lobbyRegion(0, 40),
+    ...manorRegion(180, 40),
+    ...villageRegion(-180, 40),
+    ...arenaRegion(0, 220),
   ];
   return {
     version: 1,
-    spawnPoint: [0, 3, 48],
+    spawnPoint: [0, 3, 40], // lobby
     parts,
-    scripts: [],
+    // Client-side flavor script authored/published in the studio. Round logic
+    // (roles, voting, teleports) is authoritative on the game server.
+    scripts: [{
+      id: "mm_welcome",
+      name: "RoundAnnouncer",
+      source: `-- Murder Mystery flavor (server runs the authoritative rounds).
+print("Welcome to Murder Mystery! Vote a map, then survive the round.")
+print("🔪 Murderer: eliminate everyone.  🔵 Sheriff: shoot the murderer.")
+print("🟢 Innocent: survive — or grab the gun if the sheriff falls, and become the hero.")
+-- gentle bob on the lobby pad so the hub feels alive
+local pad = workspace:FindFirstChild("LobbyPad")
+if pad then
+  local t = 0
+  while true do
+    t = t + 0.05
+    pad.Rotation = pad.Rotation + Vector3.new(0, 1.5, 0)
+    wait(0.05)
+  end
+end`,
+    }],
     mode: "murder",
   };
 }

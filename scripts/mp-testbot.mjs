@@ -28,11 +28,17 @@ room.onMessage("role", (m) => {
   console.log(`[bot] role  <- ${m.role}`);
 });
 
+const voteFor = Number(process.argv[5] ?? 0); // which map this bot votes for
 const $ = getStateCallbacks(room);
 $(room.state).listen("phase", (v) => {
-  console.log(`[bot] phase <- ${v} (winner=${room.state.winner || "-"})`);
-  if (v === "playing" && (myRole === "murderer" || myRole === "sheriff")) {
-    // find the other player and attack after a short delay
+  console.log(`[bot] phase <- ${v} (map=${room.state.map || "-"} winner=${room.state.winner || "-"})`);
+  if (v === "voting") {
+    setTimeout(() => {
+      console.log(`[bot] voting for map ${voteFor}`);
+      room.send("vote", { map: voteFor });
+    }, 1000);
+  }
+  if (v === "playing" && (myRole === "murderer" || myRole === "sheriff" || myRole === "hero")) {
     setTimeout(() => {
       for (const [sid] of room.state.players) {
         if (sid !== room.sessionId) {
@@ -44,13 +50,19 @@ $(room.state).listen("phase", (v) => {
     }, 2500);
   }
 });
+$(room.state).listen("map", (m) => { if (m) console.log(`[bot] map chosen: ${m}`); });
+// Hold wherever the server teleports us so attacks land in range.
+let pos = { x: 0, y: 6, z: 40 };
+room.onMessage("teleport", (m) => {
+  pos = { x: m.x, y: m.y, z: m.z };
+  console.log(`[bot] teleport <- (${Math.round(m.x)},${Math.round(m.y)},${Math.round(m.z)})`);
+});
 
-// park the bot at the murder-map spawn so it's within stab range of the browser
 let t = 0;
 const timer = setInterval(() => {
   t += 0.1;
   if (mode === "murder") {
-    room.send("move", { x: Math.sin(t) * 2, y: 6, z: 48 + Math.cos(t) * 2, ry: t % (Math.PI * 2) });
+    room.send("move", { x: pos.x, y: pos.y, z: pos.z, ry: 0 });
   } else {
     room.send("move", { x: Math.sin(t) * 8, y: 3, z: Math.cos(t) * 8, ry: t % (Math.PI * 2) });
   }

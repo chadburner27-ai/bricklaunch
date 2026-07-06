@@ -50,11 +50,18 @@ type Role = "none" | "innocent" | "sheriff" | "murderer" | "hero";
 
 const ROLE_INFO: Record<Role, { label: string; hint: string; color: string }> = {
   none: { label: "", hint: "", color: "" },
-  innocent: { label: "🟢 INNOCENT", hint: "Survive! If the sheriff falls, grab the gun.", color: "#6ad46a" },
-  sheriff: { label: "🔵 SHERIFF", hint: "Find and shoot the murderer. Click a player to shoot.", color: "#3fb2ff" },
-  murderer: { label: "🔪 MURDERER", hint: "Eliminate everyone. Get close and click to strike.", color: "#e0457b" },
-  hero: { label: "🔫 HERO", hint: "You have the gun — shoot the murderer!", color: "#3fb2ff" },
+  innocent: { label: "🟢 INNOCENT", hint: "Survive! If the sheriff falls, grab the dropped gun to become the hero.", color: "#6ad46a" },
+  sheriff: { label: "🔵 SHERIFF", hint: "Find and shoot the murderer — click a player to shoot. Don't shoot innocents!", color: "#3fb2ff" },
+  murderer: { label: "🔪 MURDERER", hint: "Eliminate EVERYONE. Get close and left-click to strike.", color: "#e0457b" },
+  hero: { label: "🦸 HERO", hint: "You grabbed the gun — hunt down the murderer!", color: "#3fb2ff" },
 };
+
+// Must match the MAPS order on the server (GameRoom.ts).
+const MURDER_MAPS = [
+  { id: "manor", name: "🏰 Brick Manor" },
+  { id: "village", name: "❄️ Snowy Village" },
+  { id: "arena", name: "🌈 Neon Arena" },
+];
 
 export function PlayerPage() {
   const { id: gameId } = useParams<{ id: string }>();
@@ -72,6 +79,8 @@ export function PlayerPage() {
   const [phase, _setPhase] = useState("sandbox");
   const [timer, setTimer] = useState(0);
   const [myAlive, _setMyAlive] = useState(true);
+  const [votes, setVotes] = useState<[number, number, number]>([0, 0, 0]);
+  const [myVote, setMyVote] = useState(-1);
   const roleRef = useRef<Role>("none");
   const phaseRef = useRef("sandbox");
   const aliveRef = useRef(true);
@@ -79,6 +88,11 @@ export function PlayerPage() {
   const setRole = (r: Role) => { roleRef.current = r; _setRole(r); };
   const setPhase = (p: string) => { phaseRef.current = p; _setPhase(p); };
   const setMyAlive = (a: boolean) => { aliveRef.current = a; _setMyAlive(a); };
+
+  const castVote = (i: number) => {
+    roomRef.current?.send("vote", { map: i });
+    setMyVote(i);
+  };
 
   const roomRef = useRef<Room | null>(null);
   const runnerRef = useRef<LuaRunner>(new LuaRunner());
@@ -326,6 +340,12 @@ export function PlayerPage() {
           setRole(m.role);
           if (m.note) pushChat({ text: m.note, system: true });
         });
+        // Server moves us between lobby / map spawns / respawn points.
+        room.onMessage("teleport", (m: { x: number; y: number; z: number }) => {
+          collider.position.set(m.x, m.y + 2.6, m.z);
+          checkpoint = new Vector3(m.x, m.y + 2.6, m.z);
+          vy = 0;
+        });
 
         // gun drop visual: floats and spins where the sheriff fell
         const gunMesh = MeshBuilder.CreateBox("gun", { width: 1.6, height: 0.5, depth: 0.4 }, scene);
@@ -347,8 +367,18 @@ export function PlayerPage() {
         const $ = getStateCallbacks(room);
 
         // murder-mode round state
-        $(room.state).listen("phase", (v: string) => setPhase(v));
+        $(room.state).listen("phase", (v: string) => {
+          setPhase(v);
+          if (v === "voting") setMyVote(-1);
+        });
         $(room.state).listen("timer", (v: number) => setTimer(v));
+        const syncVotes = () => {
+          const s: any = room.state;
+          setVotes([s.vote0, s.vote1, s.vote2]);
+        };
+        $(room.state).listen("vote0", syncVotes);
+        $(room.state).listen("vote1", syncVotes);
+        $(room.state).listen("vote2", syncVotes);
         const syncGun = () => {
           const s: any = room.state;
           gunRef.current = { dropped: s.gunDropped, x: s.gunX, y: s.gunY, z: s.gunZ };
@@ -443,37 +473,47 @@ export function PlayerPage() {
         right.y = 0;
         right.normalize();
 
+        // Dead players during a round become free-flying ghost spectators.
+        const spectating = !aliveRef.current && phaseRef.current === "playing";
+
         let dx = 0, dz = 0;
-        const canMove = aliveRef.current || phaseRef.current !== "playing";
-        if (canMove) {
-          if (keys["KeyW"]) { dx += fwd.x; dz += fwd.z; }
-          if (keys["KeyS"]) { dx -= fwd.x; dz -= fwd.z; }
-          if (keys["KeyD"]) { dx += right.x; dz += right.z; }
-          if (keys["KeyA"]) { dx -= right.x; dz -= right.z; }
-        }
+        if (keys["KeyW"]) { dx += fwd.x; dz += fwd.z; }
+        if (keys["KeyS"]) { dx -= fwd.x; dz -= fwd.z; }
+        if (keys["KeyD"]) { dx += right.x; dz += right.z; }
+        if (keys["KeyA"]) { dx -= right.x; dz -= right.z; }
         const moving = dx !== 0 || dz !== 0;
         if (moving) {
           const len = Math.hypot(dx, dz);
-          dx = (dx / len) * WALK_SPEED;
-          dz = (dz / len) * WALK_SPEED;
+          const spd = spectating ? WALK_SPEED * 1.6 : WALK_SPEED;
+          dx = (dx / len) * spd;
+          dz = (dz / len) * spd;
           me.root.rotation.y = Math.atan2(dx, dz); // face travel direction
         }
-        // walk-cycle animation for my character
-        me.animate(performance.now() / 1000, moving ? 1 : 0);
-        vy += GRAVITY * scene.getAnimationRatio() * 0.06;
-        if (keys["Space"] && grounded) { vy = JUMP_POWER; grounded = false; }
+        me.animate(performance.now() / 1000, moving && !spectating ? 1 : 0);
 
-        const before = collider.position.y;
-        collider.moveWithCollisions(new Vector3(dx, vy, dz));
-        // grounded if vertical motion got blocked while falling
-        if (vy < 0 && Math.abs(collider.position.y - (before + vy)) > 0.001) {
-          grounded = true;
+        if (spectating) {
+          // ghost: fly freely, no gravity or collision, Space up / Shift down
+          let dy = 0;
+          if (keys["Space"]) dy += WALK_SPEED * 1.6;
+          if (keys["ShiftLeft"] || keys["ControlLeft"]) dy -= WALK_SPEED * 1.6;
+          collider.position.x += dx;
+          collider.position.y += dy;
+          collider.position.z += dz;
           vy = 0;
-        }
-        // respawn at the last checkpoint if fallen off the world
-        if (collider.position.y < checkpoint.y - 80) {
-          collider.position.copyFrom(checkpoint);
-          vy = 0;
+        } else {
+          vy += GRAVITY * scene.getAnimationRatio() * 0.06;
+          if (keys["Space"] && grounded) { vy = JUMP_POWER; grounded = false; }
+          const before = collider.position.y;
+          collider.moveWithCollisions(new Vector3(dx, vy, dz));
+          if (vy < 0 && Math.abs(collider.position.y - (before + vy)) > 0.001) {
+            grounded = true;
+            vy = 0;
+          }
+          // respawn at the last checkpoint if fallen off the world
+          if (collider.position.y < checkpoint.y - 80) {
+            collider.position.copyFrom(checkpoint);
+            vy = 0;
+          }
         }
         // camera locked to the player's head — moves with the player, orbit
         // angle stays wherever the right-drag left it
@@ -564,9 +604,10 @@ export function PlayerPage() {
           <div className="round-hud">
             {phase === "lobby" && (
               <span className="muted">
-                {playerCount >= 2 ? `Round starts in ${timer}s…` : "Waiting for players…"}
+                {playerCount >= 2 ? `🏠 Lobby — voting in ${timer}s…` : "🏠 Lobby — waiting for players…"}
               </span>
             )}
+            {phase === "voting" && <span>🗺️ Vote for the next map · {timer}s</span>}
             {phase === "playing" && (
               <>
                 <span>⏱ {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, "0")}</span>
@@ -577,14 +618,40 @@ export function PlayerPage() {
                 )}
               </>
             )}
-            {phase === "ended" && <span>Round over — next one in {timer}s</span>}
+            {phase === "ended" && <span>Round over — back to lobby in {timer}s</span>}
           </div>
         )}
+
+        {/* Map voting panel */}
+        {phase === "voting" && (
+          <div className="vote-panel">
+            <div className="vote-title">Vote for the next map</div>
+            <div className="vote-maps">
+              {MURDER_MAPS.map((m, i) => (
+                <button
+                  key={m.id}
+                  className={`vote-map ${myVote === i ? "voted" : ""}`}
+                  onClick={() => castVote(i)}
+                >
+                  <div className="vote-map-name">{m.name}</div>
+                  <div className="vote-count">{votes[i]} vote{votes[i] === 1 ? "" : "s"}</div>
+                </button>
+              ))}
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              {myVote >= 0 ? "Vote locked in — most votes wins!" : "Click a map to vote"}
+            </div>
+          </div>
+        )}
+
         {phase === "playing" && role !== "none" && myAlive && (
           <div className="role-hint">{ROLE_INFO[role].hint}</div>
         )}
         {phase === "playing" && !myAlive && (
-          <div className="dead-overlay">💀 You died — spectating until next round</div>
+          <div className="dead-overlay">
+            💀 You're out — spectating<br />
+            <span style={{ fontSize: 13, fontWeight: 400 }}>Fly with WASD · Space up · Shift down</span>
+          </div>
         )}
       </div>
       <div className="player-chat">
