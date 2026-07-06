@@ -3,7 +3,8 @@ import { Server, matchMaker } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GameRoom } from "./GameRoom.js";
 
-const PORT = Number(process.env.GAMESERVER_PORT ?? 2567);
+// GAMESERVER_PORT for local dev; PORT is what cloud hosts (Render etc.) inject.
+const PORT = Number(process.env.GAMESERVER_PORT ?? process.env.PORT ?? 2567);
 
 // The same HTTP server carries the Colyseus WebSocket upgrade AND a tiny
 // REST surface: GET /counts -> { [gameId]: livePlayerCount } for the launcher.
