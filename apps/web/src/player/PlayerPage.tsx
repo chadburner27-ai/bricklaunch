@@ -71,6 +71,13 @@ export function PlayerPage() {
   const [status, setStatus] = useState("Loading game…");
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+
+  const openChat = () => {
+    setChatOpen(true);
+    setTimeout(() => chatInputRef.current?.focus(), 0);
+  };
   const [playerCount, setPlayerCount] = useState(1);
   const [full, setFull] = useState(false);
 
@@ -562,10 +569,25 @@ export function PlayerPage() {
   function sendChat(e: React.FormEvent) {
     e.preventDefault();
     const text = chatInput.trim();
-    if (!text) return;
-    roomRef.current?.send("chat", text);
+    if (text) roomRef.current?.send("chat", text);
     setChatInput("");
+    setChatOpen(false);
+    chatInputRef.current?.blur();
   }
+
+  // Press "/" to start chatting (Roblox-style), unless already typing somewhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "/") {
+        e.preventDefault();
+        openChat();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Wait for auth to resolve so we join with the right username/avatar,
   // not as a guest during the initial token check.
@@ -653,25 +675,34 @@ export function PlayerPage() {
             <span style={{ fontSize: 13, fontWeight: 400 }}>Fly with WASD · Space up · Shift down</span>
           </div>
         )}
-      </div>
-      <div className="player-chat">
-        <div className="drawer-head"><span>Chat</span></div>
-        <div className="chat-lines">
-          {chat.map((l, i) => (
-            <div key={i} className={l.system ? "chat-system" : ""}>
-              {l.from && <b>{l.from}: </b>}
-              {l.text}
-            </div>
-          ))}
+
+        {/* Compact chat box, top-left. Click it or press "/" to type. */}
+        <div className={`chat-box ${chatOpen ? "open" : ""}`} onClick={() => !chatOpen && openChat()}>
+          <div className="chat-log">
+            {chat.slice(-7).map((l, i) => (
+              <div key={i} className={l.system ? "chat-system" : ""}>
+                {l.from && <b>{l.from}: </b>}
+                {l.text}
+              </div>
+            ))}
+          </div>
+          {chatOpen ? (
+            <form onSubmit={sendChat} className="chat-input-row">
+              <input
+                ref={chatInputRef}
+                placeholder="Type a message, then Enter…"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { setChatOpen(false); e.currentTarget.blur(); }
+                }}
+                onBlur={() => setChatOpen(false)}
+              />
+            </form>
+          ) : (
+            <div className="chat-hint">Press <kbd>/</kbd> or click to chat</div>
+          )}
         </div>
-        <form onSubmit={sendChat} style={{ display: "flex", gap: 6, padding: 8 }}>
-          <input
-            placeholder="Say something…"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-          />
-          <button>Send</button>
-        </form>
       </div>
     </div>
   );
