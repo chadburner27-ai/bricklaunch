@@ -16,8 +16,11 @@ services:
     name: bricklaunch-gameserver
     runtime: node
     plan: free
-    buildCommand: npm install
-    startCommand: npx tsx apps/gameserver/src/index.ts
+    # Compile to plain JS and run with `node` — `tsx` JIT-compiles TypeScript in
+    # memory, which on the 512MB free tier can OOM-kill the process when a
+    # WebSocket connects. Compiled JS is lighter and more stable.
+    buildCommand: npm install && npm run build --workspace apps/gameserver
+    startCommand: node apps/gameserver/dist/index.js
 
   - type: web
     name: bricklaunch-web

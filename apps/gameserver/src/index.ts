@@ -48,13 +48,13 @@ const httpServer = http.createServer((req, res) => {
 
   if (req.method === "GET" && url === "/debug") {
     res.setHeader("Content-Type", "text/plain");
-    res.end(`build=ws-crash-debug-1\nlastError:\n${lastError}`);
+    res.end(`build=node-build-2\nlastError:\n${lastError}`);
     return;
   }
 
   if (req.method === "GET" && (url === "/" || url === "/health")) {
     res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("BrickLaunch game server OK (build ws-crash-debug-1)");
+    res.end("BrickLaunch game server OK (build node-build-2)");
     return;
   }
 
