@@ -9,3 +9,4 @@ apps/api/storage/
 apps/desktop/renderer/
 apps/desktop/dist/
 .DS_Store
+scripts/mptest.mjs

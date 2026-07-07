@@ -6,11 +6,22 @@ import { GameRoom } from "./GameRoom.js";
 // GAMESERVER_PORT for local dev; PORT is what cloud hosts (Render etc.) inject.
 const PORT = Number(process.env.GAMESERVER_PORT ?? process.env.PORT ?? 2567);
 
-// The same HTTP server carries the Colyseus WebSocket upgrade AND a tiny
-// REST surface: GET /counts -> { [gameId]: livePlayerCount } for the launcher.
+// IMPORTANT: Colyseus attaches its OWN `request` listener for the matchmaking
+// routes (/matchmake/*). If our handler responds to those requests too, the two
+// listeners race and the response is corrupted — behind a proxy (Render) that
+// surfaces as intermittent 502s and players fail to join the same room.
+//
+// So this handler ONLY answers /counts and a health check, and returns WITHOUT
+// touching the response for everything else (notably /matchmake), letting
+// Colyseus handle it.
 const httpServer = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  if (req.method === "GET" && req.url === "/counts") {
+  const url = req.url ?? "";
+
+  // Never touch matchmaking or websocket-upgrade routes — Colyseus owns them.
+  if (url.indexOf("/matchmake") !== -1) return;
+
+  if (req.method === "GET" && url === "/counts") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
     try {
       const rooms = await matchMaker.query({ name: "game" });
       const counts: Record<string, number> = {};
@@ -26,6 +37,14 @@ const httpServer = http.createServer(async (req, res) => {
     }
     return;
   }
+
+  // Health check / anything else: a plain 200 keeps Render's probes happy.
+  if (req.method === "GET" && (url === "/" || url === "/health")) {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("BrickLaunch game server OK");
+    return;
+  }
+
   res.writeHead(404);
   res.end();
 });
